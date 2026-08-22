@@ -7,42 +7,65 @@ import { authClient } from '@/lib/auth-client'
 export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClose: () => void }) {
   const router = useRouter()
   const [isSignUp, setIsSignUp] = useState(false)
+  const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
+  const [successMessage, setSuccessMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
   if (!isOpen) return null
 
+  const handleTabChange = (signUpMode: boolean) => {
+    setIsSignUp(signUpMode)
+    setError('')
+    setSuccessMessage('')
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setSuccessMessage('')
     setLoading(true)
 
     try {
       if (isSignUp) {
+        if (password.length < 8) {
+          setError('Password must be at least 8 characters long.')
+          setLoading(false)
+          return
+        }
+
         const { error: signUpError } = await authClient.signUp.email({
           email,
           password,
           name,
         })
+
         if (signUpError) {
           setError(signUpError.message || 'Failed to create account')
           return
         }
+
+        // With autoSignIn: false, the session is not created.
+        // Prompt the user to manually sign in.
+        setIsSignUp(false)
+        setPassword('')
+        setSuccessMessage('Account created successfully! Please sign in with your credentials.')
       } else {
         const { error: signInError } = await authClient.signIn.email({
           email,
           password,
         })
+
         if (signInError) {
           setError(signInError.message || 'Invalid email or password')
           return
         }
+
+        onClose()
+        router.refresh()
       }
-      onClose()
-      router.refresh()
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Something went wrong. Please try again.'
       setError(message)
@@ -65,7 +88,18 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
           </button>
         </div>
 
-        {error && <p className="text-xs text-rose-500 mb-3">{error}</p>}
+        {successMessage && (
+          <div className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs p-3 rounded-xl mb-4 flex items-start gap-2">
+            <span>✓</span>
+            <span>{successMessage}</span>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-rose-500/10 border border-rose-500/20 text-rose-400 text-xs p-3 rounded-xl mb-4">
+            {error}
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {isSignUp && (
@@ -76,7 +110,8 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+                placeholder="John Doe"
+                className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition"
               />
             </div>
           )}
@@ -88,7 +123,8 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
               required
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              placeholder="you@example.com"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition"
             />
           </div>
 
@@ -99,7 +135,8 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 focus:outline-none focus:border-blue-500"
+              placeholder={isSignUp ? 'Min. 8 characters' : 'Enter your password'}
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-sm text-slate-100 placeholder-slate-600 focus:outline-none focus:border-blue-500 transition"
             />
           </div>
 
@@ -115,7 +152,8 @@ export default function AuthModal({ isOpen, onClose }: { isOpen: boolean; onClos
         <p className="text-xs text-slate-400 text-center mt-4">
           {isSignUp ? 'Already have an account?' : "Don't have an account?"}{' '}
           <button
-            onClick={() => setIsSignUp(!isSignUp)}
+            type="button"
+            onClick={() => handleTabChange(!isSignUp)}
             className="text-blue-400 font-semibold hover:underline"
           >
             {isSignUp ? 'Sign In' : 'Sign Up'}
