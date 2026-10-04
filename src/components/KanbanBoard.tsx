@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import TaskCard from './taskCard'
 import { updateTaskDay } from '@/app/actions/tasks'
 
@@ -27,12 +27,14 @@ const days = [
 
 export default function KanbanBoard({ initialTasks }: KanbanBoardProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
+  const [syncedTasks, setSyncedTasks] = useState<Task[]>(initialTasks)
   const [draggedTaskId, setDraggedTaskId] = useState<string | null>(null)
   const [activeDropDay, setActiveDropDay] = useState<string | null>(null)
 
-  useEffect(() => {
+  if (initialTasks !== syncedTasks) {
+    setSyncedTasks(initialTasks)
     setTasks(initialTasks)
-  }, [initialTasks])
+  }
 
   const handleDragStart = (e: React.DragEvent, taskId: string) => {
     e.dataTransfer.setData('text/plain', taskId)

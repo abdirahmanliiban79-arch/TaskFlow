@@ -1,30 +1,18 @@
 'use server'
 
 import { prisma } from '@/lib/prisma'
-import { auth } from '@/lib/auth'
-import { headers } from 'next/headers'
-import { revalidatePath } from 'next/cache'
+import { getSession } from '@/lib/session'
+import { TASKS_CACHE_TAG } from '@/lib/tasks'
+import { revalidatePath, updateTag } from 'next/cache'
 
 async function getSessionUser() {
-  const session = await auth.api.getSession({
-    headers: await headers(),
-  })
+  const session = await getSession()
   return session?.user || null
 }
 
-export async function getTasks() {
-  const user = await getSessionUser()
-  if (!user) return []
-
-  try {
-    return await prisma.task.findMany({
-      where: { userId: user.id },
-      orderBy: { createdAt: 'desc' },
-    })
-  } catch (error) {
-    console.error('Failed to fetch tasks:', error)
-    return []
-  }
+function invalidateTasks() {
+  updateTag(TASKS_CACHE_TAG)
+  revalidatePath('/')
 }
 
 export async function createTask(formData: FormData) {
@@ -50,7 +38,7 @@ export async function createTask(formData: FormData) {
       },
     })
 
-    revalidatePath('/')
+    invalidateTasks()
     return { success: true }
   } catch (error) {
     console.error('Failed to create task:', error)
@@ -70,7 +58,7 @@ export async function updateTaskDay(id: string, dayOfWeek: string) {
 
     if (result.count === 0) return { error: 'Task not found' }
 
-    revalidatePath('/')
+    invalidateTasks()
     return { success: true }
   } catch (error) {
     console.error('Failed to update task day:', error)
@@ -88,7 +76,7 @@ export async function updateTaskStatus(id: string, status: string) {
       data: { status },
     })
 
-    revalidatePath('/')
+    invalidateTasks()
     return { success: true }
   } catch (error) {
     console.error('Failed to update status:', error)
@@ -105,7 +93,7 @@ export async function deleteTask(id: string) {
       where: { id, userId: user.id },
     })
 
-    revalidatePath('/')
+    invalidateTasks()
     return { success: true }
   } catch (error) {
     console.error('Failed to delete task:', error)

@@ -3,6 +3,30 @@
 import { useState } from 'react'
 import { Bot, Send, X, Loader2, Sparkles } from 'lucide-react'
 
+const REQUEST_TIMEOUT_MS = 60_000
+const RETRY_DELAY_MS = 1_000
+
+async function requestAi(message: string, signal: AbortSignal) {
+  const res = await fetch('/api/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+    signal,
+  })
+
+  const data = await res.json().catch(() => null)
+
+  if (!res.ok) {
+    throw new Error(data?.error || `Request failed with status ${res.status}`)
+  }
+
+  return data as { text?: string }
+}
+
+function wait(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 export default function AIAssistant() {
   const [isOpen, setIsOpen] = useState(false)
   const [input, setInput] = useState('')
@@ -13,6 +37,7 @@ export default function AIAssistant() {
     },
   ])
   const [loading, setLoading] = useState(false)
+  const [slow, setSlow] = useState(false)
 
   async function handleSend(e: React.FormEvent) {
     e.preventDefault()
@@ -22,32 +47,48 @@ export default function AIAssistant() {
     setInput('')
     setMessages((prev) => [...prev, { sender: 'user', text: userMessage }])
     setLoading(true)
+    setSlow(false)
+
+    const slowTimer = setTimeout(() => setSlow(true), 2500)
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
 
     try {
-      const res = await fetch('/api/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: userMessage }),
-      })
+      let data: { text?: string }
 
-      const data = await res.json()
-
-      if (data.text) {
-        setMessages((prev) => [...prev, { sender: 'ai', text: data.text }])
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { sender: 'ai', text: 'Sorry, I could not generate a response. Please check your Gemini API key.' },
-        ])
+      try {
+        data = await requestAi(userMessage, controller.signal)
+      } catch (error) {
+        if (controller.signal.aborted) throw error
+        await wait(RETRY_DELAY_MS)
+        data = await requestAi(userMessage, controller.signal)
       }
+
+      setMessages((prev) => [
+        ...prev,
+        {
+          sender: 'ai',
+          text:
+            data.text ||
+            'Sorry, I could not generate a response. Please check your Gemini API key.',
+        },
+      ])
     } catch (error) {
       console.error('Chat Error:', error)
       setMessages((prev) => [
         ...prev,
-        { sender: 'ai', text: 'Something went wrong. Please try again later.' },
+        {
+          sender: 'ai',
+          text: controller.signal.aborted
+            ? 'The AI assistant is taking longer than expected to wake up. Please try again in a moment.'
+            : 'Something went wrong. Please try again later.',
+        },
       ])
     } finally {
+      clearTimeout(slowTimer)
+      clearTimeout(timeout)
       setLoading(false)
+      setSlow(false)
     }
   }
 
@@ -108,7 +149,7 @@ export default function AIAssistant() {
                 <div className="flex justify-start">
                   <div className="bg-slate-800/80 border border-slate-700/50 rounded-2xl p-3.5 text-sm text-slate-400 flex items-center gap-2">
                     <Loader2 className="w-4 h-4 animate-spin text-blue-400" />
-                    <span>Thinking...</span>
+                    <span>{slow ? 'Waking up the AI assistant…' : 'Thinking...'}</span>
                   </div>
                 </div>
               )}
